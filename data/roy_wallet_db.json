@@ -1,0 +1,181 @@
+{
+  "users": [
+    {
+      "id": "usr-master-admin",
+      "name": "Master Admin",
+      "email": "izaz786@metal.com",
+      "phone": "9876543210",
+      "password": "Izaz@123",
+      "aadhaar": "795847362675",
+      "pan": "DRPTH6732G",
+      "photoUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
+      "status": "active",
+      "balance": 0,
+      "bankDetails": null,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "role": "admin"
+    },
+    {
+      "id": "usr-sakib-1",
+      "name": "Sakib Khan",
+      "email": "sakib786gf@gmail.com",
+      "phone": "9876543210",
+      "password": "Izaz@123",
+      "aadhaar": "782145901234",
+      "pan": "ABCDE1234F",
+      "photoUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "status": "active",
+      "balance": 0,
+      "bankDetails": {
+        "bankName": "HDFC Bank",
+        "accountHolder": "Sakib Khan",
+        "accountNumber": "5010029482910",
+        "ifsc": "HDFC0001234",
+        "accountType": "Savings Account"
+      },
+      "createdAt": "2026-03-05T12:00:00.000Z",
+      "role": "user"
+    },
+    {
+      "id": "usr-admin-1",
+      "name": "Iran sardar",
+      "email": "izazm728@gmail.com",
+      "phone": "6745385798",
+      "password": "Izaz@123",
+      "aadhaar": "795847362675",
+      "pan": "DRPTH6732G",
+      "photoUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
+      "status": "inactive",
+      "balance": 50000,
+      "bankDetails": {
+        "bankName": "State Bank of India",
+        "accountHolder": "Iran sardar",
+        "accountNumber": "482910394851",
+        "ifsc": "SBIN0004821",
+        "accountType": "Savings Account"
+      },
+      "createdAt": "2026-03-01T10:00:00.000Z",
+      "role": "user"
+    },
+    {
+      "id": "usr-rahul-1",
+      "name": "Rahul Varma",
+      "email": "rahul.v@metal.in",
+      "phone": "9456789012",
+      "password": "Izaz@123",
+      "aadhaar": "445566778899",
+      "pan": "APZRV9012M",
+      "photoUrl": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80",
+      "status": "active",
+      "balance": 0,
+      "bankDetails": {
+        "bankName": "Axis Bank",
+        "accountHolder": "Rahul Varma",
+        "accountNumber": "9120100482910",
+        "ifsc": "UTIB0000482",
+        "accountType": "Savings Account"
+      },
+      "createdAt": "2026-03-10T14:30:00.000Z",
+      "role": "user"
+    },
+    {
+      "id": "usr-priya-1",
+      "name": "Priya Sharma",
+      "email": "priya.s@metal.in",
+      "phone": "9123456789",
+      "password": "Izaz@123",
+      "aadhaar": "983210458821",
+      "pan": "BKZPS4920K",
+      "photoUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
+      "status": "active",
+      "balance": 0,
+      "bankDetails": {
+        "bankName": "ICICI Bank",
+        "accountHolder": "Priya Sharma",
+        "accountNumber": "1002938472910",
+        "ifsc": "ICIC0001002",
+        "accountType": "Savings Account"
+      },
+      "createdAt": "2026-03-12T09:15:00.000Z",
+      "role": "user"
+    },
+    {
+      "id": "usr-sakib-metal",
+      "name": "Sakib (SS Metal User)",
+      "email": "ss8910642@gmail.com",
+      "phone": "8910642786",
+      "password": "Izaz@123",
+      "aadhaar": "891064205647",
+      "pan": "SSPAN5647M",
+      "photoUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+      "status": "active",
+      "balance": 0,
+      "bankDetails": {
+        "bankName": "Punjab National Bank",
+        "accountHolder": "Sakib",
+        "accountNumber": "0849201948510",
+        "ifsc": "PUNB0084900",
+        "accountType": "Savings Account"
+      },
+      "createdAt": "2026-03-15T16:20:00.000Z",
+      "role": "user"
+    },
+    {
+      "id": "usr-suman-1",
+      "name": "SUMAN KUMAR SIHNA",
+      "email": "sss8910642@gmail.com",
+      "phone": "9508965002",
+      "password": "Izaz@123",
+      "aadhaar": "337375674038",
+      "pan": "DRPSH7280L",
+      "photoUrl": "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=400&q=80",
+      "status": "active",
+      "balance": 0,
+      "bankDetails": {
+        "bankName": "Bank of Baroda",
+        "accountHolder": "SUMAN KUMAR SIHNA",
+        "accountNumber": "3948201948512",
+        "ifsc": "BARB0KANKAR",
+        "accountType": "Savings Account"
+      },
+      "createdAt": "2026-03-20T11:00:00.000Z",
+      "role": "user"
+    },
+    {
+      "id": "usr-eycrjbd",
+      "name": "Eycrjbd",
+      "email": "arabulsardar507@gmail.com",
+      "phone": "63784689",
+      "password": "Izaz@123",
+      "aadhaar": "574784785785",
+      "pan": "DREYH6473B",
+      "photoUrl": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80",
+      "status": "active",
+      "balance": 0,
+      "bankDetails": {
+        "bankName": "Kotak Mahindra Bank",
+        "accountHolder": "Eycrjbd",
+        "accountNumber": "748291038491",
+        "ifsc": "KKBK0000482",
+        "accountType": "Savings Account"
+      },
+      "createdAt": "2026-03-22T13:40:00.000Z",
+      "role": "user"
+    }
+  ],
+  "transactions": [
+    {
+      "id": "txn-101",
+      "userId": "usr-admin-1",
+      "type": "credit",
+      "amount": 50000,
+      "description": "IMPS Inward Remittance - Direct Bank Settlement",
+      "refNo": "ROY-TXN-94812",
+      "date": "2026-04-01T14:22:10.000Z",
+      "balanceAfter": 50000,
+      "status": "completed"
+    }
+  ],
+  "withdrawals": [],
+  "smsNotifications": []
+}

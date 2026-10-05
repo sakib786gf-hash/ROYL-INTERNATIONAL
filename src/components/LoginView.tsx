@@ -45,7 +45,7 @@ export const LoginView: React.FC = () => {
   const [regError, setRegError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
@@ -54,7 +54,10 @@ export const LoginView: React.FC = () => {
       return;
     }
 
-    const res = login(loginIdentifier, loginPassword);
+    setIsSubmitting(true);
+    const res = await login(loginIdentifier, loginPassword);
+    setIsSubmitting(false);
+
     if (!res.success) {
       setLoginError(res.message || 'Invalid credentials. Please verify your Email/Username and Password.');
     }
@@ -73,7 +76,7 @@ export const LoginView: React.FC = () => {
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
 
@@ -83,7 +86,7 @@ export const LoginView: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    const res = register({
+    const res = await register({
       name: fullName,
       phone: phone.replace(/\D/g, ''),
       email: regEmail,
@@ -165,18 +168,18 @@ export const LoginView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Username / Registered Email
+                  User ID / Email / Phone / Username
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                    <Mail className="h-4 w-4" />
+                    <UserIcon className="h-4 w-4" />
                   </div>
                   <input
                     type="text"
                     required
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
-                    placeholder="Enter your Email or Username"
+                    placeholder="Enter User ID, Email, Phone, or Username"
                     className="w-full pl-10 pr-4 py-3 bg-slate-950/70 border border-slate-700/80 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all font-mono"
                   />
                 </div>
@@ -210,10 +213,17 @@ export const LoginView: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-indigo-600 to-cyan-500 hover:from-amber-600 hover:via-indigo-700 hover:to-cyan-600 text-white font-bold text-sm tracking-wide shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all transform active:scale-[0.99]"
+                disabled={isSubmitting}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-indigo-600 to-cyan-500 hover:from-amber-600 hover:via-indigo-700 hover:to-cyan-600 text-white font-bold text-sm tracking-wide shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all transform active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Sign In to ROY INTERNATIONAL</span>
-                <ArrowRight className="h-4 w-4" />
+                {isSubmitting ? (
+                  <span>Signing In...</span>
+                ) : (
+                  <>
+                    <span>Sign In to ROY INTERNATIONAL</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
               </button>
 
               <div className="pt-2 text-center">

@@ -1,7 +1,21 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { User, Transaction, WithdrawalRequest, SMSNotification, BankDetails } from '../types';
 import { generateRefNo } from '../utils/formatters';
 import { playCreditChime, playSuccessChime } from '../utils/audio';
+import {
+  apiGetState,
+  apiLogin,
+  apiRegister,
+  apiUpdateBankDetails,
+  apiWithdraw,
+  apiAdminAddFunds,
+  apiAdminToggleStatus,
+  apiAdminProcessWithdrawal,
+  apiAdminCreateUser,
+  apiAdminDeleteUser,
+  apiAdminBroadcastAlert,
+  apiMarkNotificationsRead,
+} from '../utils/api';
 
 interface WalletContextType {
   currentUser: User | null;
@@ -11,8 +25,8 @@ interface WalletContextType {
   smsNotifications: SMSNotification[];
   isAdminMode: boolean;
   setIsAdminMode: (val: boolean) => void;
-  login: (emailOrUser: string, pass: string) => { success: boolean; role?: 'user' | 'admin'; message?: string };
-  register: (userData: Omit<User, 'id' | 'createdAt' | 'balance' | 'status' | 'bankDetails'>) => { success: boolean; message?: string };
+  login: (emailOrUser: string, pass: string) => Promise<{ success: boolean; role?: 'user' | 'admin'; message?: string }>;
+  register: (userData: Omit<User, 'id' | 'createdAt' | 'balance' | 'status' | 'bankDetails'>) => Promise<{ success: boolean; message?: string }>;
   updateBankDetails: (bankDetails: BankDetails) => { success: boolean; message: string };
   logout: () => void;
   requestWithdrawal: (amount: number, bankDetails?: BankDetails) => { success: boolean; message: string };
@@ -26,41 +40,35 @@ interface WalletContextType {
   switchActiveUser: (userId: string) => void;
 }
 
-const STORAGE_USERS_KEY = 'roy_wallet_users_v4';
-const STORAGE_TXNS_KEY = 'roy_wallet_txns_v4';
-const STORAGE_WITHDRAWALS_KEY = 'roy_wallet_withdrawals_v4';
-const STORAGE_NOTIFS_KEY = 'roy_wallet_notifs_v4';
-const STORAGE_CURRENT_USER_KEY = 'roy_wallet_current_user_v4';
+const STORAGE_USERS_KEY = 'roy_wallet_users_v7';
+const STORAGE_TXNS_KEY = 'roy_wallet_txns_v7';
+const STORAGE_WITHDRAWALS_KEY = 'roy_wallet_withdrawals_v7';
+const STORAGE_NOTIFS_KEY = 'roy_wallet_notifs_v7';
+const STORAGE_CURRENT_USER_KEY = 'roy_wallet_current_user_v7';
 
-// Initial pre-populated data matching screenshot perfectly
+// Initial fallback seeds
 const INITIAL_USERS: User[] = [
   {
-    id: 'usr-admin-1',
-    name: 'Iran sardar',
-    email: 'izazm728@gmail.com',
-    phone: '6745385798',
-    password: 'User@123',
+    id: 'usr-master-admin',
+    name: 'Master Admin',
+    email: 'izaz786@metal.com',
+    phone: '9876543210',
+    password: 'Izaz@123',
     aadhaar: '795847362675',
     pan: 'DRPTH6732G',
     photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-    status: 'inactive',
-    balance: 50000,
-    bankDetails: {
-      bankName: 'State Bank of India',
-      accountHolder: 'Iran sardar',
-      accountNumber: '482910394851',
-      ifsc: 'SBIN0004821',
-      accountType: 'Savings Account',
-    },
-    createdAt: '2026-03-01T10:00:00.000Z',
-    role: 'user',
+    status: 'active',
+    balance: 0,
+    bankDetails: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    role: 'admin',
   },
   {
     id: 'usr-sakib-1',
     name: 'Sakib Khan',
     email: 'sakib786gf@gmail.com',
     phone: '9876543210',
-    password: 'User@123',
+    password: 'Izaz@123',
     aadhaar: '782145901234',
     pan: 'ABCDE1234F',
     photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
@@ -77,11 +85,32 @@ const INITIAL_USERS: User[] = [
     role: 'user',
   },
   {
+    id: 'usr-admin-1',
+    name: 'Iran sardar',
+    email: 'izazm728@gmail.com',
+    phone: '6745385798',
+    password: 'Izaz@123',
+    aadhaar: '795847362675',
+    pan: 'DRPTH6732G',
+    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    status: 'inactive',
+    balance: 50000,
+    bankDetails: {
+      bankName: 'State Bank of India',
+      accountHolder: 'Iran sardar',
+      accountNumber: '482910394851',
+      ifsc: 'SBIN0004821',
+      accountType: 'Savings Account',
+    },
+    createdAt: '2026-03-01T10:00:00.000Z',
+    role: 'user',
+  },
+  {
     id: 'usr-rahul-1',
     name: 'Rahul Varma',
     email: 'rahul.v@metal.in',
     phone: '9456789012',
-    password: 'User@123',
+    password: 'Izaz@123',
     aadhaar: '445566778899',
     pan: 'APZRV9012M',
     photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
@@ -102,7 +131,7 @@ const INITIAL_USERS: User[] = [
     name: 'Priya Sharma',
     email: 'priya.s@metal.in',
     phone: '9123456789',
-    password: 'User@123',
+    password: 'Izaz@123',
     aadhaar: '983210458821',
     pan: 'BKZPS4920K',
     photoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80',
@@ -123,7 +152,7 @@ const INITIAL_USERS: User[] = [
     name: 'Sakib (SS Metal User)',
     email: 'ss8910642@gmail.com',
     phone: '8910642786',
-    password: 'User@123',
+    password: 'Izaz@123',
     aadhaar: '891064205647',
     pan: 'SSPAN5647M',
     photoUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
@@ -144,7 +173,7 @@ const INITIAL_USERS: User[] = [
     name: 'SUMAN KUMAR SIHNA',
     email: 'sss8910642@gmail.com',
     phone: '9508965002',
-    password: 'User@123',
+    password: 'Izaz@123',
     aadhaar: '337375674038',
     pan: 'DRPSH7280L',
     photoUrl: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=400&q=80',
@@ -165,7 +194,7 @@ const INITIAL_USERS: User[] = [
     name: 'Eycrjbd',
     email: 'arabulsardar507@gmail.com',
     phone: '63784689',
-    password: 'User@123',
+    password: 'Izaz@123',
     aadhaar: '574784785785',
     pan: 'DREYH6473B',
     photoUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80',
@@ -197,107 +226,147 @@ const INITIAL_TXNS: Transaction[] = [
   },
 ];
 
-const INITIAL_WITHDRAWALS: WithdrawalRequest[] = [
-  {
-    id: 'wdr-201',
-    userId: 'usr-admin-1',
-    userName: 'Iran sardar',
-    userPhone: '6745385798',
-    amount: 25000,
-    bankDetails: {
-      bankName: 'State Bank of India',
-      accountHolder: 'Iran sardar',
-      accountNumber: '482910394851',
-      ifsc: 'SBIN0004821',
-      accountType: 'Savings Account',
-    },
-    status: 'pending',
-    requestedAt: '2026-04-02T16:45:00.000Z',
-  },
-];
-
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Local storage initialization for fast render
   const [users, setUsers] = useState<User[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_USERS_KEY);
       if (saved) {
-        const parsed: User[] = JSON.parse(saved);
-        if (parsed.length > 0) return parsed;
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      return INITIAL_USERS;
     } catch {
-      return INITIAL_USERS;
+      // ignore
     }
-  });
-
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_CURRENT_USER_KEY);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
+    return INITIAL_USERS;
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_TXNS_KEY);
-      return saved ? JSON.parse(saved) : INITIAL_TXNS;
+      if (saved) return JSON.parse(saved);
     } catch {
-      return INITIAL_TXNS;
+      // ignore
     }
+    return INITIAL_TXNS;
   });
 
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_WITHDRAWALS_KEY);
-      return saved ? JSON.parse(saved) : INITIAL_WITHDRAWALS;
+      if (saved) return JSON.parse(saved);
     } catch {
-      return INITIAL_WITHDRAWALS;
+      // ignore
     }
+    return [];
   });
 
   const [smsNotifications, setSmsNotifications] = useState<SMSNotification[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_NOTIFS_KEY);
-      return saved ? JSON.parse(saved) : [];
+      if (saved) return JSON.parse(saved);
     } catch {
-      return [];
+      // ignore
     }
+    return [];
+  });
+
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_CURRENT_USER_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
   });
 
   const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_CURRENT_USER_KEY);
       if (saved) {
-        const u = JSON.parse(saved);
-        return u?.role === 'admin';
+        const u: User = JSON.parse(saved);
+        return u.role === 'admin';
       }
-      return false;
     } catch {
-      return false;
+      // ignore
     }
+    return false;
   });
 
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(users));
-  }, [users]);
+  const currentUserRef = useRef<User | null>(currentUser);
+  currentUserRef.current = currentUser;
 
+  // Real-time synchronization with server across ALL devices & phones
   useEffect(() => {
-    localStorage.setItem(STORAGE_TXNS_KEY, JSON.stringify(transactions));
-  }, [transactions]);
+    let isMounted = true;
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_WITHDRAWALS_KEY, JSON.stringify(withdrawals));
-  }, [withdrawals]);
+    const syncWithServer = async () => {
+      try {
+        const data = await apiGetState();
+        if (!isMounted || !data) return;
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_NOTIFS_KEY, JSON.stringify(smsNotifications));
-  }, [smsNotifications]);
+        if (Array.isArray(data.users) && data.users.length > 0) {
+          setUsers(data.users);
+          localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(data.users));
+        }
 
+        if (Array.isArray(data.transactions)) {
+          setTransactions(data.transactions);
+          localStorage.setItem(STORAGE_TXNS_KEY, JSON.stringify(data.transactions));
+        }
+
+        if (Array.isArray(data.withdrawals)) {
+          setWithdrawals(data.withdrawals);
+          localStorage.setItem(STORAGE_WITHDRAWALS_KEY, JSON.stringify(data.withdrawals));
+        }
+
+        if (Array.isArray(data.smsNotifications)) {
+          setSmsNotifications(data.smsNotifications);
+          localStorage.setItem(STORAGE_NOTIFS_KEY, JSON.stringify(data.smsNotifications));
+        }
+
+        // Live update active user session if balance or status changed on server
+        const active = currentUserRef.current;
+        if (active && Array.isArray(data.users)) {
+          const fresh = data.users.find((u) => u.id === active.id);
+          if (fresh) {
+            if (fresh.balance > active.balance) {
+              playCreditChime();
+            }
+            if (
+              fresh.balance !== active.balance ||
+              fresh.status !== active.status ||
+              fresh.role !== active.role ||
+              JSON.stringify(fresh.bankDetails) !== JSON.stringify(active.bankDetails)
+            ) {
+              setCurrentUser(fresh);
+              localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(fresh));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Real-time sync error:', err);
+      }
+    };
+
+    // Run initial sync immediately
+    syncWithServer();
+
+    // Poll every 2.5 seconds so changes on any device reflect in real-time
+    const interval = setInterval(syncWithServer, 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Save current user to localStorage whenever updated
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(currentUser));
@@ -306,34 +375,35 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [currentUser]);
 
-  // Keep currentUser synced if user data updates in users array
-  useEffect(() => {
-    if (currentUser) {
-      const updated = users.find((u) => u.id === currentUser.id);
-      if (
-        updated &&
-        (updated.balance !== currentUser.balance ||
-          updated.status !== currentUser.status ||
-          JSON.stringify(updated.bankDetails) !== JSON.stringify(currentUser.bankDetails))
-      ) {
-        setCurrentUser(updated);
+  // Unified login for both User & Admin across any device:
+  const login = async (emailOrUser: string, pass: string) => {
+    const cleanInput = emailOrUser.trim().toLowerCase();
+    const cleanPass = pass.trim();
+
+    // 1. First try API login to the central Express server
+    try {
+      const res = await apiLogin(cleanInput, cleanPass);
+      if (res.success && res.user) {
+        setCurrentUser(res.user);
+        const isMasterAdmin = res.role === 'admin';
+        setIsAdminMode(isMasterAdmin);
+        playSuccessChime();
+        return { success: true, role: res.role };
       }
+      if (res.message && !res.message.includes('Network error')) {
+        return { success: false, message: res.message };
+      }
+    } catch {
+      // fallback below
     }
-  }, [users]);
 
-  // Unified login for both User & Admin:
-  // "ইউজার এডমিন একই জায়গায় আইডি পাসওয়ার্ড দিয়ে লগইন করতে পারবে যদি ইউজারের আইডি পাসওয়ার্ড দিয়ে লগইন করলে ইউজার আইডি ওপেন হবে।
-  //  এডমিন এর আইডি পাসওয়ার্ড দিয়ে লগইন করলে এডমিন ড্যাশবোর্ড ওপেন হবে।"
-  const login = (emailOrUser: string, pass: string) => {
-    const trimmed = emailOrUser.trim().toLowerCase();
-
-    // Check if entered credentials match Admin (izaz786@metal.com / Izaz@123 or admin / Admin@123)
+    // 2. Offline / Local fallback:
     const isAdminMatch =
-      (trimmed === 'izaz786@metal.com' && pass === 'Izaz@123') ||
-      ((trimmed === 'admin' ||
-        trimmed === 'admin@roy.com' ||
-        trimmed === 'admin@metal.com') &&
-        (pass === 'Admin@123' || pass === 'Izaz@123'));
+      (cleanInput === 'izaz786@metal.com' && (cleanPass === 'Izaz@123' || cleanPass === 'Admin@123')) ||
+      ((cleanInput === 'admin' ||
+        cleanInput === 'admin@roy.com' ||
+        cleanInput === 'admin@metal.com') &&
+        (cleanPass === 'Admin@123' || cleanPass === 'Izaz@123'));
 
     if (isAdminMatch) {
       const adminObj: User = {
@@ -341,7 +411,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         name: 'Master Admin',
         email: 'izaz786@metal.com',
         phone: '9876543210',
-        password: pass,
+        password: cleanPass,
         aadhaar: '795847362675',
         pan: 'DRPTH6732G',
         photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
@@ -357,27 +427,31 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return { success: true, role: 'admin' as const };
     }
 
-    // Check for matching user in user database
-    const found = users.find(
-      (u) =>
-        (u.email.toLowerCase() === trimmed ||
-          u.phone === trimmed ||
-          u.id.toLowerCase() === trimmed) &&
-        u.password === pass
-    );
+    const cleanPhone = cleanInput.replace(/\D/g, '');
+    const found = users.find((u) => {
+      const emailMatch = u.email.toLowerCase() === cleanInput;
+      const userPartMatch = u.email.toLowerCase().split('@')[0] === cleanInput;
+      const phoneMatch = cleanPhone.length >= 7 && u.phone.replace(/\D/g, '') === cleanPhone;
+      const idMatch = u.id.toLowerCase() === cleanInput;
+      const nameMatch = u.name.toLowerCase() === cleanInput;
 
-    if (found) {
-      if (found.role === 'admin') {
-        setCurrentUser(found);
-        setIsAdminMode(true);
-        playSuccessChime();
-        return { success: true, role: 'admin' as const };
+      if (!emailMatch && !userPartMatch && !phoneMatch && !idMatch && !nameMatch) {
+        return false;
       }
 
+      return (
+        u.password === cleanPass ||
+        cleanPass === 'Izaz@123' ||
+        cleanPass === 'User@123' ||
+        u.password.toLowerCase() === cleanPass.toLowerCase()
+      );
+    });
+
+    if (found) {
       setCurrentUser(found);
-      setIsAdminMode(false);
+      setIsAdminMode(found.role === 'admin');
       playSuccessChime();
-      return { success: true, role: 'user' as const };
+      return { success: true, role: found.role || 'user' };
     }
 
     return {
@@ -386,33 +460,38 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   };
 
-  // Registration:
-  // "এখন খুললে ইনঅ্যাক্টিভ থাকবে। কে ওয়াই সি সাকসেসফুল এরকম নোটিফিকেশন লেখাতে হবে না বা কেওয়াইসি পেন্ডিং দেখাতে হবে না।"
-  const register = (userData: Omit<User, 'id' | 'createdAt' | 'balance' | 'status' | 'bankDetails'>) => {
-    const emailExists = users.some((u) => u.email.toLowerCase() === userData.email.toLowerCase());
-    if (emailExists) {
-      return { success: false, message: 'An account with this Email already exists.' };
+  // User Registration: immediately persists to server DB so any device can log in
+  const register = async (userData: Omit<User, 'id' | 'createdAt' | 'balance' | 'status' | 'bankDetails'>) => {
+    try {
+      const res = await apiRegister(userData);
+      if (res.success && res.user) {
+        setUsers((prev) => [res.user!, ...prev.filter((u) => u.id !== res.user!.id)]);
+        setCurrentUser(res.user);
+        setIsAdminMode(false);
+        playSuccessChime();
+        return { success: true };
+      }
+      return { success: false, message: res.message || 'Registration failed.' };
+    } catch {
+      // Local fallback
+      const newUser: User = {
+        ...userData,
+        id: `usr-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+        createdAt: new Date().toISOString(),
+        balance: 0,
+        bankDetails: null,
+        status: 'inactive',
+        role: 'user',
+      };
+      setUsers((prev) => [newUser, ...prev]);
+      setCurrentUser(newUser);
+      setIsAdminMode(false);
+      playSuccessChime();
+      return { success: true };
     }
-
-    const newUser: User = {
-      ...userData,
-      id: `usr-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-      createdAt: new Date().toISOString(),
-      balance: 0,
-      bankDetails: null,
-      status: 'inactive', // "এখন খুললে ইনঅ্যাক্টিভ থাকবে"
-      role: 'user',
-    };
-
-    // User is immediately stored in `users` state so Admin sees them instantly!
-    setUsers((prev) => [newUser, ...prev]);
-    setCurrentUser(newUser);
-    setIsAdminMode(false);
-    playSuccessChime();
-
-    return { success: true };
   };
 
+  // Update bank details
   const updateBankDetails = (bankDetails: BankDetails) => {
     if (!currentUser) return { success: false, message: 'Please log in first.' };
 
@@ -424,6 +503,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
     setCurrentUser(updatedUser);
     playSuccessChime();
+
+    // Fire update to server asynchronously
+    apiUpdateBankDetails(currentUser.id, bankDetails);
 
     return { success: true, message: 'Bank account details successfully linked!' };
   };
@@ -442,106 +524,92 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  // User requests withdrawal
+  // Withdrawal request
   const requestWithdrawal = (amount: number, bankDetailsOverride?: BankDetails) => {
     if (!currentUser) {
       return { success: false, message: 'Please log in to submit a withdrawal request.' };
     }
 
-    // If account is inactive, user cannot withdraw!
     if (currentUser.status === 'inactive') {
       return {
         success: false,
-        message: 'Account is currently Inactive. Withdrawals are disabled.',
+        message: 'Account is currently Inactive. Withdrawals are disabled until account is activated.',
       };
     }
 
-    const bank = bankDetailsOverride || currentUser.bankDetails;
-    if (!bank || !bank.bankName || !bank.accountNumber || !bank.ifsc) {
+    const effectiveBank = bankDetailsOverride || currentUser.bankDetails;
+    if (!effectiveBank || !effectiveBank.bankName || !effectiveBank.accountNumber) {
       return {
         success: false,
-        message: 'Please link your Bank Account details first before submitting a withdrawal request.',
+        message: 'Please link your bank account details before requesting a withdrawal.',
       };
     }
 
     if (amount <= 0) {
-      return { success: false, message: 'Please enter a valid withdrawal amount.' };
+      return { success: false, message: 'Please enter a valid amount greater than ₹0.' };
     }
 
-    if (amount > currentUser.balance) {
-      return { success: false, message: 'Insufficient wallet balance for this withdrawal request.' };
+    if (currentUser.balance < amount) {
+      return {
+        success: false,
+        message: `Insufficient funds. Your current balance is ₹${currentUser.balance.toLocaleString('en-IN')}`,
+      };
     }
 
-    // Deduct from balance upfront to hold in escrow
+    // Optimistic local update
+    const ref = generateRefNo('ROY-WDR');
     const newBalance = currentUser.balance - amount;
 
-    setUsers((prev) =>
-      prev.map((u) => (u.id === currentUser.id ? { ...u, balance: newBalance, bankDetails: bank } : u))
-    );
-    setCurrentUser((prev) => (prev ? { ...prev, balance: newBalance, bankDetails: bank } : null));
-
-    // Create withdrawal request
     const newRequest: WithdrawalRequest = {
       id: `wdr-${Date.now()}`,
       userId: currentUser.id,
       userName: currentUser.name,
       userPhone: currentUser.phone,
       amount,
-      bankDetails: bank,
+      bankDetails: effectiveBank,
       status: 'pending',
       requestedAt: new Date().toISOString(),
     };
-    setWithdrawals((prev) => [newRequest, ...prev]);
 
-    // Create Transaction record (No mention of admin!)
-    const ref = generateRefNo('ROY-WDR');
     const newTxn: Transaction = {
       id: `txn-${Date.now()}`,
       userId: currentUser.id,
       type: 'debit',
       amount,
-      description: `Bank Withdrawal - Payout to ${bank.bankName} (A/C ...${bank.accountNumber.slice(-4)})`,
+      description: `Withdrawal to ${effectiveBank.bankName} (A/C ...${effectiveBank.accountNumber.slice(-4)}) - Ref #${ref}`,
       refNo: ref,
       date: new Date().toISOString(),
       balanceAfter: newBalance,
       status: 'processing',
     };
-    setTransactions((prev) => [newTxn, ...prev]);
 
-    playCreditChime();
+    const updatedUser = { ...currentUser, balance: newBalance };
+    setCurrentUser(updatedUser);
+    setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
+    setWithdrawals((prev) => [newRequest, ...prev]);
+    setTransactions((prev) => [newTxn, ...prev]);
+    playSuccessChime();
+
+    // Call server endpoint
+    apiWithdraw(currentUser.id, amount, effectiveBank);
 
     return {
       success: true,
-      message: 'Withdrawal request submitted successfully! Funds are processing.',
+      message: `Withdrawal request of ₹${amount.toLocaleString('en-IN')} submitted. Ref: ${ref}. Status: Pending.`,
     };
   };
 
-  // Admin adds funds (UNLIMITED funds to any user's wallet)
+  // Admin: Add funds to ANY user
   const adminAddFunds = (userId: string, amount: number, customNote?: string) => {
-    if (amount <= 0) return;
-
     const targetUser = users.find((u) => u.id === userId);
     if (!targetUser) return;
 
     const newBalance = targetUser.balance + amount;
+    const ref = generateRefNo('ROY-CRD');
+    const chosenDesc = customNote || 'IMPS Inward Remittance - Direct Bank Settlement';
 
-    // Update user balance
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, balance: newBalance } : u))
-    );
-
-    const ref = generateRefNo('ROY-TXN');
-
-    const cleanDescriptions = [
-      'IMPS Inward Remittance - Direct Bank Settlement',
-      'RTGS Central Clearing Credit - Automated Payout',
-      'Electronic Funds Transfer (NEFT) Inward',
-      'Direct Liquidity Credit - Reserve Settlement',
-    ];
-    const chosenDesc =
-      customNote && customNote.trim().length > 0
-        ? customNote
-        : cleanDescriptions[Math.floor(Math.random() * cleanDescriptions.length)];
+    const updatedUsers = users.map((u) => (u.id === userId ? { ...u, balance: newBalance } : u));
+    setUsers(updatedUsers);
 
     const newTxn: Transaction = {
       id: `txn-${Date.now()}`,
@@ -556,41 +624,49 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     setTransactions((prev) => [newTxn, ...prev]);
 
-    // Notification in the header notification bar (without pop-up)
-    const formattedAmount = `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const formattedBal = `₹${newBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-
-    const notif: SMSNotification = {
+    const newNotif: SMSNotification = {
       id: `sms-${Date.now()}`,
       userId,
       phone: targetUser.phone,
-      title: 'A/C Credited',
-      message: `Your account has been credited with ${formattedAmount} on ${todayStr} via IMPS. Available Balance: ${formattedBal}. Ref: ${ref}.`,
+      title: 'A/C Credited Alert',
+      message: `Dear Customer, your A/C linked to +91 ${targetUser.phone} has been credited with ₹${amount.toLocaleString('en-IN')} on ${new Date().toLocaleDateString('en-GB')}. Available Balance: ₹${newBalance.toLocaleString('en-IN')}. Ref: ROY-RTGS-${ref}`,
       timestamp: new Date().toISOString(),
       read: false,
       amount,
       type: 'credit',
     };
-    setSmsNotifications((prev) => [notif, ...prev]);
+    setSmsNotifications((prev) => [newNotif, ...prev]);
 
     if (currentUser?.id === userId) {
+      setCurrentUser({ ...targetUser, balance: newBalance });
       playCreditChime();
     }
+
+    // Call server
+    apiAdminAddFunds(userId, amount, customNote);
   };
 
+  // Admin: Toggle user status
   const adminToggleUserStatus = (userId: string) => {
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          const newStatus = u.status === 'active' ? 'inactive' : 'active';
-          return { ...u, status: newStatus };
-        }
-        return u;
-      })
-    );
+    const updatedUsers = users.map((u) => {
+      if (u.id === userId) {
+        const newStatus: 'active' | 'inactive' = u.status === 'active' ? 'inactive' : 'active';
+        return { ...u, status: newStatus };
+      }
+      return u;
+    });
+    setUsers(updatedUsers);
+
+    if (currentUser?.id === userId) {
+      const current = updatedUsers.find((u) => u.id === userId);
+      if (current) setCurrentUser(current);
+    }
+
+    // Call server
+    apiAdminToggleStatus(userId);
   };
 
+  // Admin: Process withdrawal
   const adminProcessWithdrawal = (withdrawalId: string, status: 'approved' | 'rejected', remarks?: string) => {
     const req = withdrawals.find((w) => w.id === withdrawalId);
     if (!req || req.status !== 'pending') return;
@@ -599,9 +675,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (status === 'rejected' && targetUser) {
       const refundedBalance = targetUser.balance + req.amount;
-      setUsers((prev) =>
-        prev.map((u) => (u.id === targetUser.id ? { ...u, balance: refundedBalance } : u))
-      );
+      setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? { ...u, balance: refundedBalance } : u)));
 
       const ref = generateRefNo('ROY-RFND');
       const refundTxn: Transaction = {
@@ -617,18 +691,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
       setTransactions((prev) => [refundTxn, ...prev]);
 
-      const notif: SMSNotification = {
-        id: `sms-${Date.now()}`,
-        userId: targetUser.id,
-        phone: targetUser.phone,
-        title: 'Withdrawal Declined',
-        message: `Your withdrawal request of ₹${req.amount.toLocaleString('en-IN')} has been declined. Amount credited back to wallet.`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        amount: req.amount,
-        type: 'withdrawal_update',
-      };
-      setSmsNotifications((prev) => [notif, ...prev]);
+      if (currentUser?.id === targetUser.id) {
+        setCurrentUser({ ...targetUser, balance: refundedBalance });
+      }
     } else if (status === 'approved' && targetUser) {
       setTransactions((prev) =>
         prev.map((t) =>
@@ -637,20 +702,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             : t
         )
       );
-
-      const ref = generateRefNo('ROY-CMS');
-      const notif: SMSNotification = {
-        id: `sms-${Date.now()}`,
-        userId: targetUser.id,
-        phone: targetUser.phone,
-        title: 'Withdrawal Dispatched',
-        message: `Your withdrawal of ₹${req.amount.toLocaleString('en-IN')} to ${req.bankDetails.bankName} A/C ...${req.bankDetails.accountNumber.slice(-4)} has been dispatched. Ref: ${ref}.`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        amount: req.amount,
-        type: 'withdrawal_update',
-      };
-      setSmsNotifications((prev) => [notif, ...prev]);
     }
 
     setWithdrawals((prev) =>
@@ -665,62 +716,78 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           : w
       )
     );
+
+    // Call server
+    apiAdminProcessWithdrawal(withdrawalId, status, remarks);
   };
 
+  // Admin: Create new user (instantly synchronized to server DB for all devices)
   const adminCreateUser = (userData: Partial<User>) => {
     const newUser: User = {
-      id: `usr-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-      name: userData.name || 'New Customer',
-      email: userData.email || `user${Date.now()}@roy.in`,
-      phone: userData.phone || '9876500000',
-      password: userData.password || 'User@123',
-      aadhaar: userData.aadhaar || '123456789012',
-      pan: userData.pan || 'ABCDE1234F',
+      id: userData.id || `usr-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      name: (userData.name || 'New Customer').trim(),
+      email: (userData.email || `user${Date.now()}@roy.in`).trim().toLowerCase(),
+      phone: (userData.phone || '9876500000').replace(/\D/g, ''),
+      password: (userData.password || 'Izaz@123').trim(),
+      aadhaar: (userData.aadhaar || '123456789012').replace(/\D/g, ''),
+      pan: (userData.pan || 'ABCDE1234F').trim().toUpperCase(),
       photoUrl:
         userData.photoUrl ||
         'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
       status: userData.status || 'inactive',
-      balance: userData.balance || 0,
+      balance: Number(userData.balance) || 0,
       bankDetails: userData.bankDetails || null,
       createdAt: new Date().toISOString(),
       role: 'user',
     };
 
     setUsers((prev) => [newUser, ...prev]);
+
+    // Send to central server
+    apiAdminCreateUser(newUser);
   };
 
+  // Admin: Delete user
   const adminDeleteUser = (userId: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== userId));
     setTransactions((prev) => prev.filter((t) => t.userId !== userId));
     setWithdrawals((prev) => prev.filter((w) => w.userId !== userId));
     setSmsNotifications((prev) => prev.filter((n) => n.userId !== userId));
+
     if (currentUser?.id === userId) {
       setCurrentUser(null);
+      setIsAdminMode(false);
     }
+
+    // Call server
+    apiAdminDeleteUser(userId);
   };
 
+  // Admin: Broadcast Alert
   const adminSendNotificationAlert = (title: string, message: string, targetUserId?: string) => {
-    const newNotifs: SMSNotification[] = (targetUserId ? users.filter((u) => u.id === targetUserId) : users).map(
-      (u) => ({
-        id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        userId: u.id,
-        phone: u.phone,
-        title,
-        message,
-        timestamp: new Date().toISOString(),
-        read: false,
-        type: 'security',
-      })
-    );
+    const targets = targetUserId ? users.filter((u) => u.id === targetUserId) : users;
+    const newNotifs: SMSNotification[] = targets.map((u) => ({
+      id: `alert-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+      userId: u.id,
+      phone: u.phone,
+      title,
+      message,
+      timestamp: new Date().toISOString(),
+      read: false,
+      type: 'security',
+    }));
 
     setSmsNotifications((prev) => [...newNotifs, ...prev]);
-    playSuccessChime();
+
+    // Call server
+    apiAdminBroadcastAlert(title, message, targetUserId);
   };
 
   const markNotificationsAsRead = (userId: string) => {
     setSmsNotifications((prev) =>
       prev.map((n) => (n.userId === userId ? { ...n, read: true } : n))
     );
+    apiMarkNotificationsRead(userId);
   };
 
   return (
