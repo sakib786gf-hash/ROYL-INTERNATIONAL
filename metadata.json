@@ -1,0 +1,6 @@
+{
+  "name": "ROY INTERNATIONAL - Digital Wallet",
+  "description": "ROY INTERNATIONAL secure digital wallet and fund management platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
