@@ -46,6 +46,7 @@ export const AdminDashboard: React.FC = () => {
   const [fundsAmount, setFundsAmount] = useState<string>('50000');
   const [customFundsNote, setCustomFundsNote] = useState('');
   const [fundAddSuccess, setFundAddSuccess] = useState('');
+  const [isSetExactMode, setIsSetExactMode] = useState(false);
 
   // View Dossier Modal
   const [inspectedUser, setInspectedUser] = useState<User | null>(null);
@@ -87,20 +88,21 @@ export const AdminDashboard: React.FC = () => {
   const inactiveCount = users.filter((u) => u.status === 'inactive').length;
   const pendingWithdrawalsCount = withdrawals.filter((w) => w.status === 'pending').length;
 
-  const handleExecuteAddFunds = (e: React.FormEvent) => {
+  const handleExecuteAddFunds = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUserForFunds) return;
 
     const amt = parseFloat(fundsAmount);
-    if (isNaN(amt) || amt <= 0) return;
+    if (isNaN(amt) || amt < 0) return;
 
-    adminAddFunds(selectedUserForFunds.id, amt, customFundsNote);
-    setFundAddSuccess(`Deposited ${formatINR(amt)} to ${selectedUserForFunds.name}'s wallet successfully.`);
+    await adminAddFunds(selectedUserForFunds.id, amt, customFundsNote, isSetExactMode);
+    const newBal = isSetExactMode ? amt : selectedUserForFunds.balance + amt;
+    setFundAddSuccess(`Updated ${selectedUserForFunds.name}'s wallet balance to ${formatINR(newBal)} successfully.`);
 
     setTimeout(() => {
       setFundAddSuccess('');
       setSelectedUserForFunds(null);
-    }, 1500);
+    }, 1800);
   };
 
   const handleRegisterUserSubmit = (e: React.FormEvent) => {
@@ -711,23 +713,57 @@ export const AdminDashboard: React.FC = () => {
               </div>
             ) : (
               <form onSubmit={handleExecuteAddFunds} className="space-y-4 mt-4">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3">
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3">
                   <img
                     src={selectedUserForFunds.photoUrl}
                     alt={selectedUserForFunds.name}
-                    className="h-10 w-10 rounded-lg object-cover"
+                    className="h-12 w-12 rounded-xl object-cover ring-2 ring-emerald-500/50"
                   />
-                  <div>
-                    <h4 className="text-sm font-bold text-white">{selectedUserForFunds.name}</h4>
-                    <p className="text-xs text-slate-400 font-mono">
-                      Current: {formatINR(selectedUserForFunds.balance)} • Phone: +91 {selectedUserForFunds.phone}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-bold text-white truncate">{selectedUserForFunds.name}</h4>
+                    <p className="text-xs text-slate-400 font-mono truncate">
+                      ID: {selectedUserForFunds.email} • +91 {selectedUserForFunds.phone}
                     </p>
+                    <p className="text-xs text-emerald-400 font-mono font-bold mt-0.5">
+                      Current Wallet Balance: {formatINR(selectedUserForFunds.balance)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Mode Selector */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Action Type
+                  </label>
+                  <div className="grid grid-cols-2 p-1 rounded-xl bg-slate-950 border border-slate-800 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsSetExactMode(false)}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                        !isSetExactMode
+                          ? 'bg-emerald-500 text-slate-950 shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      ➕ Add to Current Balance
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsSetExactMode(true)}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                        isSetExactMode
+                          ? 'bg-emerald-500 text-slate-950 shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🎯 Set Exact Balance
+                    </button>
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Amount to Add (₹ INR)
+                    {isSetExactMode ? 'Set Exact Total Balance (₹ INR)' : 'Amount to Add (₹ INR)'}
                   </label>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-emerald-400 font-mono font-bold text-base">
@@ -736,7 +772,7 @@ export const AdminDashboard: React.FC = () => {
                     <input
                       type="number"
                       required
-                      min={1}
+                      min={0}
                       value={fundsAmount}
                       onChange={(e) => setFundsAmount(e.target.value)}
                       placeholder="e.g. 50000"
@@ -752,9 +788,34 @@ export const AdminDashboard: React.FC = () => {
                         onClick={() => setFundsAmount(amt.toString())}
                         className="py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-mono text-slate-300 border border-slate-700"
                       >
-                        +{formatINR(amt)}
+                        {isSetExactMode ? `₹${amt.toLocaleString('en-IN')}` : `+${formatINR(amt)}`}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Calculation preview badge */}
+                <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-xs font-mono space-y-1">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Current User Balance:</span>
+                    <span className="text-white">{formatINR(selectedUserForFunds.balance)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>{isSetExactMode ? 'New Direct Balance:' : 'Deposit Added:'}</span>
+                    <span className="text-emerald-400 font-bold">
+                      {isSetExactMode ? '' : '+'}
+                      {formatINR(parseFloat(fundsAmount) || 0)}
+                    </span>
+                  </div>
+                  <div className="pt-1.5 border-t border-emerald-800/60 flex justify-between items-center text-emerald-300 font-bold text-sm">
+                    <span>New Balance on User Account:</span>
+                    <span className="text-base text-emerald-400 font-extrabold">
+                      {formatINR(
+                        isSetExactMode
+                          ? parseFloat(fundsAmount) || 0
+                          : selectedUserForFunds.balance + (parseFloat(fundsAmount) || 0)
+                      )}
+                    </span>
                   </div>
                 </div>
 
@@ -773,10 +834,14 @@ export const AdminDashboard: React.FC = () => {
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
+                  className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/20 transition-all transform active:scale-[0.99]"
                 >
                   <PlusCircle className="h-4 w-4" />
-                  <span>Execute Deposit into Wallet</span>
+                  <span>
+                    {isSetExactMode
+                      ? `Set Balance to ${formatINR(parseFloat(fundsAmount) || 0)}`
+                      : `Execute Deposit of ${formatINR(parseFloat(fundsAmount) || 0)}`}
+                  </span>
                 </button>
               </form>
             )}

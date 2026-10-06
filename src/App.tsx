@@ -5,6 +5,7 @@ import { Navbar } from './components/Navbar';
 import { LoginView } from './components/LoginView';
 import { UserDashboard } from './components/UserDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
+import { SMSAlertToast } from './components/SMSAlertToast';
 
 const MainContent: React.FC = () => {
   const { currentUser, isAdminMode } = useWallet();
@@ -14,6 +15,7 @@ const MainContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col text-slate-100 relative selection:bg-emerald-500 selection:text-slate-950">
       <SpaceBackground />
+      <SMSAlertToast />
 
       {!currentUser ? (
         <>

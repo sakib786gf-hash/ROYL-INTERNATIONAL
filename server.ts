@@ -575,21 +575,36 @@ app.post('/api/withdraw', (req: Request, res: Response) => {
 
 // 7. Admin Add Unlimited Funds to ANY User
 app.post('/api/admin/funds', (req: Request, res: Response) => {
-  const { userId, amount, description } = req.body || {};
+  const { userId, amount, description, setBalance } = req.body || {};
   const numAmount = Number(amount);
 
-  if (!userId || !numAmount || numAmount <= 0) {
+  if (!userId || isNaN(numAmount) || numAmount < 0) {
     res.status(400).json({ success: false, message: 'Invalid userId or amount' });
     return;
   }
 
-  const user = db.users.find((u) => u.id === userId);
+  const cleanId = String(userId).trim().toLowerCase();
+  const cleanPhone = cleanId.replace(/\D/g, '');
+
+  const user = db.users.find((u) => {
+    return (
+      u.id.toLowerCase() === cleanId ||
+      u.email.toLowerCase() === cleanId ||
+      u.email.toLowerCase().split('@')[0] === cleanId ||
+      (cleanPhone.length >= 7 && u.phone.replace(/\D/g, '') === cleanPhone)
+    );
+  });
+
   if (!user) {
     res.status(404).json({ success: false, message: 'Target user not found' });
     return;
   }
 
-  user.balance += numAmount;
+  const previousBalance = user.balance;
+  const newBalance = setBalance ? numAmount : previousBalance + numAmount;
+  const addedAmount = setBalance ? Math.max(0, newBalance - previousBalance) : numAmount;
+  user.balance = newBalance;
+
   const ref = generateRefNo('ROY-CRD');
 
   const chosenDesc =
@@ -601,7 +616,7 @@ app.post('/api/admin/funds', (req: Request, res: Response) => {
     id: `txn-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
     userId: user.id,
     type: 'credit',
-    amount: numAmount,
+    amount: addedAmount > 0 ? addedAmount : numAmount,
     description: `${chosenDesc} - Ref #${ref}`,
     refNo: ref,
     date: new Date().toISOString(),
@@ -614,10 +629,10 @@ app.post('/api/admin/funds', (req: Request, res: Response) => {
     userId: user.id,
     phone: user.phone,
     title: 'A/C Credited Alert',
-    message: `Dear Customer, your A/C linked to +91 ${user.phone} has been credited with ₹${numAmount.toLocaleString('en-IN')} on ${new Date().toLocaleDateString('en-GB')}. Available Balance: ₹${user.balance.toLocaleString('en-IN')}. Ref: ROY-RTGS-${ref}`,
+    message: `Dear Customer, your A/C linked to +91 ${user.phone} has been credited with ₹${(addedAmount > 0 ? addedAmount : numAmount).toLocaleString('en-IN')} on ${new Date().toLocaleDateString('en-GB')}. Available Balance: ₹${user.balance.toLocaleString('en-IN')}. Ref: ROY-RTGS-${ref}`,
     timestamp: new Date().toISOString(),
     read: false,
-    amount: numAmount,
+    amount: addedAmount > 0 ? addedAmount : numAmount,
     type: 'credit',
   };
 

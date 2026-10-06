@@ -24,13 +24,17 @@ import { formatINR, numberToWordsINR, formatAadhaar } from '../utils/formatters'
 export const UserDashboard: React.FC = () => {
   const {
     currentUser,
+    users,
     transactions,
     withdrawals,
     smsNotifications,
     requestWithdrawal,
     updateBankDetails,
+    refreshData,
     logout,
   } = useWallet();
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Navigation & Modals
   const [activeBottomNav, setActiveBottomNav] = useState<'home' | 'history' | 'notice' | 'bank' | 'profile'>('home');
@@ -58,17 +62,38 @@ export const UserDashboard: React.FC = () => {
 
   if (!currentUser) return null;
 
-  const isAccountActive = currentUser.status === 'active';
+  // Real-time authoritative user data from live users state
+  const liveUser =
+    users.find(
+      (u) =>
+        u.id === currentUser.id ||
+        (currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (currentUser.phone && u.phone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, ''))
+    ) || currentUser;
+
+  const isAccountActive = liveUser.status === 'active';
   const hasLinkedBank = Boolean(
-    currentUser.bankDetails &&
-    currentUser.bankDetails.bankName &&
-    currentUser.bankDetails.accountNumber &&
-    currentUser.bankDetails.ifsc
+    liveUser.bankDetails &&
+    liveUser.bankDetails.bankName &&
+    liveUser.bankDetails.accountNumber &&
+    liveUser.bankDetails.ifsc
   );
 
-  const userTransactions = transactions.filter((t) => t.userId === currentUser.id);
-  const userWithdrawals = withdrawals.filter((w) => w.userId === currentUser.id);
-  const userNotifs = smsNotifications.filter((n) => n.userId === currentUser.id);
+  const userTransactions = transactions.filter(
+    (t) => t.userId === liveUser.id || (liveUser.email && t.userId === liveUser.email)
+  );
+  const userWithdrawals = withdrawals.filter(
+    (w) => w.userId === liveUser.id || (liveUser.email && w.userId === liveUser.email)
+  );
+  const userNotifs = smsNotifications.filter(
+    (n) => n.userId === liveUser.id || (liveUser.email && n.userId === liveUser.email)
+  );
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshData();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
 
   // Get Initials for avatar badge if needed
   const getInitials = (name: string) => {
@@ -180,11 +205,11 @@ export const UserDashboard: React.FC = () => {
 
           {/* Refresh Icon */}
           <button
-            onClick={() => window.location.reload()}
+            onClick={handleManualRefresh}
             className="p-2 rounded-full border border-slate-800 bg-slate-950/70 hover:bg-slate-900 text-slate-300 hover:text-white transition-colors"
-            title="Refresh"
+            title="Refresh Live Balance"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
 
           {/* Logout Icon */}
@@ -203,15 +228,15 @@ export const UserDashboard: React.FC = () => {
         <div className="flex items-center gap-4">
           {/* Avatar Square with glowing neon green ring + status dot */}
           <div className="relative shrink-0">
-            {currentUser.photoUrl ? (
+            {liveUser.photoUrl ? (
               <img
-                src={currentUser.photoUrl}
-                alt={currentUser.name}
+                src={liveUser.photoUrl}
+                alt={liveUser.name}
                 className="h-16 w-16 sm:h-18 sm:w-18 rounded-[20px] object-cover ring-2 ring-emerald-400 shadow-[0_0_15px_rgba(16,230,75,0.4)]"
               />
             ) : (
               <div className="h-16 w-16 sm:h-18 sm:w-18 rounded-[20px] bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center font-bold text-xl sm:text-2xl text-white font-mono ring-2 ring-emerald-400 shadow-[0_0_15px_rgba(16,230,75,0.4)]">
-                {getInitials(currentUser.name)}
+                {getInitials(liveUser.name)}
               </div>
             )}
             {/* Status dot badge at bottom right */}
@@ -227,13 +252,13 @@ export const UserDashboard: React.FC = () => {
           {/* Name & ID pill */}
           <div className="min-w-0 flex-1">
             <h2 className="text-lg sm:text-xl font-bold text-white tracking-wide truncate">
-              {currentUser.name}
+              {liveUser.name}
             </h2>
 
             <div className="mt-1.5 flex items-center gap-1.5">
               <span className="text-xs font-mono text-slate-400">ID:</span>
               <span className="inline-block px-3 py-1 rounded-full text-xs font-mono font-medium bg-emerald-950/60 border border-emerald-500/70 text-emerald-400 shadow-[0_0_10px_rgba(16,230,75,0.2)] truncate max-w-[220px]">
-                {currentUser.email}
+                {liveUser.email}
               </span>
             </div>
           </div>
@@ -242,24 +267,35 @@ export const UserDashboard: React.FC = () => {
 
       {/* 3. TOTAL BALANCE CARD (MATCHING SCREENSHOT) */}
       <div className="relative overflow-hidden rounded-[28px] bg-[#070b14]/90 backdrop-blur-2xl border border-slate-800/90 p-5 sm:p-6 shadow-2xl space-y-4">
-        {/* Top row: TOTAL BALANCE label + LIVE badge */}
+        {/* Top row: TOTAL BALANCE label + LIVE badge + SYNC button */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-mono uppercase tracking-widest text-slate-400">
             TOTAL BALANCE
           </span>
-          <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-bold tracking-wider uppercase border border-emerald-500 text-emerald-400 bg-emerald-950/40 shadow-[0_0_8px_rgba(16,230,75,0.25)]">
-            LIVE
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleManualRefresh}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700/80 text-[11px] font-mono text-emerald-400 hover:bg-slate-800 transition-all shadow-sm"
+              title="Click to fetch newest balance"
+            >
+              <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>SYNC</span>
+            </button>
+            <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-bold tracking-wider uppercase border border-emerald-500 text-emerald-400 bg-emerald-950/40 shadow-[0_0_8px_rgba(16,230,75,0.25)] flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              LIVE
+            </span>
+          </div>
         </div>
 
         {/* Amount */}
         <div className="pt-1">
           <div className="text-4xl sm:text-5xl font-black text-white tracking-tight font-sans">
-            ₹ {currentUser.balance.toLocaleString('en-IN')}
+            ₹ {Number(liveUser.balance || 0).toLocaleString('en-IN')}
           </div>
 
           <p className="mt-2 text-[10px] sm:text-[11px] font-mono text-slate-400 tracking-wider uppercase">
-            ACCOUNT BALANCE IN WORDS: {numberToWordsINR(currentUser.balance)}
+            ACCOUNT BALANCE IN WORDS: {numberToWordsINR(Number(liveUser.balance || 0))}
           </p>
         </div>
 

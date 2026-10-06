@@ -105,7 +105,8 @@ export async function apiWithdraw(
 export async function apiAdminAddFunds(
   userId: string,
   amount: number,
-  description?: string
+  description?: string,
+  setBalance?: boolean
 ): Promise<{
   success: boolean;
   user?: User;
@@ -117,7 +118,7 @@ export async function apiAdminAddFunds(
     const res = await fetch('/api/admin/funds', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, amount, description }),
+      body: JSON.stringify({ userId, amount, description, setBalance }),
     });
     return await res.json();
   } catch (err) {

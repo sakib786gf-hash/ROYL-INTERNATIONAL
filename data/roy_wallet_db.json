@@ -25,7 +25,7 @@
       "pan": "ABCDE1234F",
       "photoUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
       "status": "active",
-      "balance": 0,
+      "balance": 75000,
       "bankDetails": {
         "bankName": "HDFC Bank",
         "accountHolder": "Sakib Khan",
@@ -165,6 +165,28 @@
   ],
   "transactions": [
     {
+      "id": "txn-1791287376460-9mo",
+      "userId": "usr-sakib-1",
+      "type": "credit",
+      "amount": 25000,
+      "description": "IMPS Inward Remittance - Direct Bank Settlement - Ref #ROY-CRD-482307",
+      "refNo": "ROY-CRD-482307",
+      "date": "2026-10-06T11:49:36.460Z",
+      "balanceAfter": 75000,
+      "status": "completed"
+    },
+    {
+      "id": "txn-1791226859992-hm5",
+      "userId": "usr-sakib-1",
+      "type": "credit",
+      "amount": 50000,
+      "description": "IMPS Inward Remittance - Direct Bank Settlement - Ref #ROY-CRD-474848",
+      "refNo": "ROY-CRD-474848",
+      "date": "2026-10-05T19:00:59.992Z",
+      "balanceAfter": 50000,
+      "status": "completed"
+    },
+    {
       "id": "txn-101",
       "userId": "usr-admin-1",
       "type": "credit",
@@ -177,5 +199,28 @@
     }
   ],
   "withdrawals": [],
-  "smsNotifications": []
+  "smsNotifications": [
+    {
+      "id": "sms-1791287376460",
+      "userId": "usr-sakib-1",
+      "phone": "9876543210",
+      "title": "A/C Credited Alert",
+      "message": "Dear Customer, your A/C linked to +91 9876543210 has been credited with ₹25,000 on 06/10/2026. Available Balance: ₹75,000. Ref: ROY-RTGS-ROY-CRD-482307",
+      "timestamp": "2026-10-06T11:49:36.486Z",
+      "read": false,
+      "amount": 25000,
+      "type": "credit"
+    },
+    {
+      "id": "sms-1791226859992",
+      "userId": "usr-sakib-1",
+      "phone": "9876543210",
+      "title": "A/C Credited Alert",
+      "message": "Dear Customer, your A/C linked to +91 9876543210 has been credited with ₹50,000 on 05/10/2026. Available Balance: ₹50,000. Ref: ROY-RTGS-ROY-CRD-474848",
+      "timestamp": "2026-10-05T19:00:59.997Z",
+      "read": false,
+      "amount": 50000,
+      "type": "credit"
+    }
+  ]
 }

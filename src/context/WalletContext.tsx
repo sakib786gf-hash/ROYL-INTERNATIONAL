@@ -25,12 +25,15 @@ interface WalletContextType {
   smsNotifications: SMSNotification[];
   isAdminMode: boolean;
   setIsAdminMode: (val: boolean) => void;
+  activeSMSPopup: SMSNotification | null;
+  dismissSMSPopup: () => void;
+  refreshData: () => Promise<void>;
   login: (emailOrUser: string, pass: string) => Promise<{ success: boolean; role?: 'user' | 'admin'; message?: string }>;
   register: (userData: Omit<User, 'id' | 'createdAt' | 'balance' | 'status' | 'bankDetails'>) => Promise<{ success: boolean; message?: string }>;
   updateBankDetails: (bankDetails: BankDetails) => { success: boolean; message: string };
   logout: () => void;
   requestWithdrawal: (amount: number, bankDetails?: BankDetails) => { success: boolean; message: string };
-  adminAddFunds: (userId: string, amount: number, customNote?: string) => void;
+  adminAddFunds: (userId: string, amount: number, customNote?: string, setBalance?: boolean) => Promise<void>;
   adminToggleUserStatus: (userId: string) => void;
   adminProcessWithdrawal: (withdrawalId: string, status: 'approved' | 'rejected', remarks?: string) => void;
   adminCreateUser: (userData: Partial<User>) => void;
@@ -40,13 +43,12 @@ interface WalletContextType {
   switchActiveUser: (userId: string) => void;
 }
 
-const STORAGE_USERS_KEY = 'roy_wallet_users_v7';
-const STORAGE_TXNS_KEY = 'roy_wallet_txns_v7';
-const STORAGE_WITHDRAWALS_KEY = 'roy_wallet_withdrawals_v7';
-const STORAGE_NOTIFS_KEY = 'roy_wallet_notifs_v7';
-const STORAGE_CURRENT_USER_KEY = 'roy_wallet_current_user_v7';
+const STORAGE_USERS_KEY = 'roy_wallet_users_v8';
+const STORAGE_TXNS_KEY = 'roy_wallet_txns_v8';
+const STORAGE_WITHDRAWALS_KEY = 'roy_wallet_withdrawals_v8';
+const STORAGE_NOTIFS_KEY = 'roy_wallet_notifs_v8';
+const STORAGE_CURRENT_USER_KEY = 'roy_wallet_current_user_v8';
 
-// Initial fallback seeds
 const INITIAL_USERS: User[] = [
   {
     id: 'usr-master-admin',
@@ -229,7 +231,6 @@ const INITIAL_TXNS: Transaction[] = [
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Local storage initialization for fast render
   const [users, setUsers] = useState<User[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_USERS_KEY);
@@ -298,67 +299,94 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return false;
   });
 
+  const [activeSMSPopup, setActiveSMSPopup] = useState<SMSNotification | null>(null);
+
+  const dismissSMSPopup = () => setActiveSMSPopup(null);
+
   const currentUserRef = useRef<User | null>(currentUser);
   currentUserRef.current = currentUser;
 
-  // Real-time synchronization with server across ALL devices & phones
+  const syncWithServer = async () => {
+    try {
+      const data = await apiGetState();
+      if (!data) return;
+
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        setUsers(data.users);
+        localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(data.users));
+      }
+
+      if (Array.isArray(data.transactions)) {
+        setTransactions(data.transactions);
+        localStorage.setItem(STORAGE_TXNS_KEY, JSON.stringify(data.transactions));
+      }
+
+      if (Array.isArray(data.withdrawals)) {
+        setWithdrawals(data.withdrawals);
+        localStorage.setItem(STORAGE_WITHDRAWALS_KEY, JSON.stringify(data.withdrawals));
+      }
+
+      if (Array.isArray(data.smsNotifications)) {
+        setSmsNotifications(data.smsNotifications);
+        localStorage.setItem(STORAGE_NOTIFS_KEY, JSON.stringify(data.smsNotifications));
+      }
+
+      // Live update active user session if balance or status changed on server
+      const active = currentUserRef.current;
+      if (active && Array.isArray(data.users)) {
+        const cleanEmail = (active.email || '').toLowerCase();
+        const cleanPhone = (active.phone || '').replace(/\D/g, '');
+
+        const fresh = data.users.find(
+          (u) =>
+            u.id === active.id ||
+            u.email.toLowerCase() === cleanEmail ||
+            (cleanPhone.length >= 7 && u.phone.replace(/\D/g, '') === cleanPhone)
+        );
+
+        if (fresh) {
+          if (fresh.balance > active.balance) {
+            playCreditChime();
+            // Show SMS Alert popup banner on screen
+            const latestCredit = data.smsNotifications?.find(
+              (n) => n.userId === fresh.id && n.type === 'credit'
+            );
+            if (latestCredit) {
+              setActiveSMSPopup(latestCredit);
+            }
+          }
+
+          if (
+            fresh.balance !== active.balance ||
+            fresh.status !== active.status ||
+            fresh.role !== active.role ||
+            JSON.stringify(fresh.bankDetails) !== JSON.stringify(active.bankDetails)
+          ) {
+            setCurrentUser(fresh);
+            localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(fresh));
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Real-time sync error:', err);
+    }
+  };
+
+  const refreshData = async () => {
+    await syncWithServer();
+  };
+
+  // Real-time synchronization polling every 1.5 seconds for instant multi-device responsiveness
   useEffect(() => {
     let isMounted = true;
 
-    const syncWithServer = async () => {
-      try {
-        const data = await apiGetState();
-        if (!isMounted || !data) return;
-
-        if (Array.isArray(data.users) && data.users.length > 0) {
-          setUsers(data.users);
-          localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(data.users));
-        }
-
-        if (Array.isArray(data.transactions)) {
-          setTransactions(data.transactions);
-          localStorage.setItem(STORAGE_TXNS_KEY, JSON.stringify(data.transactions));
-        }
-
-        if (Array.isArray(data.withdrawals)) {
-          setWithdrawals(data.withdrawals);
-          localStorage.setItem(STORAGE_WITHDRAWALS_KEY, JSON.stringify(data.withdrawals));
-        }
-
-        if (Array.isArray(data.smsNotifications)) {
-          setSmsNotifications(data.smsNotifications);
-          localStorage.setItem(STORAGE_NOTIFS_KEY, JSON.stringify(data.smsNotifications));
-        }
-
-        // Live update active user session if balance or status changed on server
-        const active = currentUserRef.current;
-        if (active && Array.isArray(data.users)) {
-          const fresh = data.users.find((u) => u.id === active.id);
-          if (fresh) {
-            if (fresh.balance > active.balance) {
-              playCreditChime();
-            }
-            if (
-              fresh.balance !== active.balance ||
-              fresh.status !== active.status ||
-              fresh.role !== active.role ||
-              JSON.stringify(fresh.bankDetails) !== JSON.stringify(active.bankDetails)
-            ) {
-              setCurrentUser(fresh);
-              localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(fresh));
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Real-time sync error:', err);
-      }
+    const runSync = async () => {
+      if (!isMounted) return;
+      await syncWithServer();
     };
 
-    // Run initial sync immediately
-    syncWithServer();
-
-    // Poll every 2.5 seconds so changes on any device reflect in real-time
-    const interval = setInterval(syncWithServer, 2500);
+    runSync();
+    const interval = setInterval(runSync, 1500);
 
     return () => {
       isMounted = false;
@@ -380,7 +408,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const cleanInput = emailOrUser.trim().toLowerCase();
     const cleanPass = pass.trim();
 
-    // 1. First try API login to the central Express server
     try {
       const res = await apiLogin(cleanInput, cleanPass);
       if (res.success && res.user) {
@@ -394,10 +421,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return { success: false, message: res.message };
       }
     } catch {
-      // fallback below
+      // fallback
     }
 
-    // 2. Offline / Local fallback:
+    // Offline / Local fallback:
     const isAdminMatch =
       (cleanInput === 'izaz786@metal.com' && (cleanPass === 'Izaz@123' || cleanPass === 'Admin@123')) ||
       ((cleanInput === 'admin' ||
@@ -460,7 +487,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   };
 
-  // User Registration: immediately persists to server DB so any device can log in
+  // User Registration
   const register = async (userData: Omit<User, 'id' | 'createdAt' | 'balance' | 'status' | 'bankDetails'>) => {
     try {
       const res = await apiRegister(userData);
@@ -473,7 +500,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       return { success: false, message: res.message || 'Registration failed.' };
     } catch {
-      // Local fallback
       const newUser: User = {
         ...userData,
         id: `usr-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
@@ -504,15 +530,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentUser(updatedUser);
     playSuccessChime();
 
-    // Fire update to server asynchronously
     apiUpdateBankDetails(currentUser.id, bankDetails);
-
     return { success: true, message: 'Bank account details successfully linked!' };
   };
 
   const logout = () => {
     setCurrentUser(null);
     setIsAdminMode(false);
+    setActiveSMSPopup(null);
   };
 
   const switchActiveUser = (userId: string) => {
@@ -556,7 +581,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
     }
 
-    // Optimistic local update
     const ref = generateRefNo('ROY-WDR');
     const newBalance = currentUser.balance - amount;
 
@@ -590,7 +614,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTransactions((prev) => [newTxn, ...prev]);
     playSuccessChime();
 
-    // Call server endpoint
     apiWithdraw(currentUser.id, amount, effectiveBank);
 
     return {
@@ -599,23 +622,40 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   };
 
-  // Admin: Add funds to ANY user
-  const adminAddFunds = (userId: string, amount: number, customNote?: string) => {
-    const targetUser = users.find((u) => u.id === userId);
+  // Admin: Add funds to ANY user (shows on user's wallet immediately!)
+  const adminAddFunds = async (
+    userId: string,
+    amount: number,
+    customNote?: string,
+    setBalance?: boolean
+  ) => {
+    const cleanId = String(userId).trim().toLowerCase();
+    const cleanPhone = cleanId.replace(/\D/g, '');
+
+    const targetUser = users.find(
+      (u) =>
+        u.id.toLowerCase() === cleanId ||
+        u.email.toLowerCase() === cleanId ||
+        (cleanPhone.length >= 7 && u.phone.replace(/\D/g, '') === cleanPhone)
+    );
+
     if (!targetUser) return;
 
-    const newBalance = targetUser.balance + amount;
+    const previousBalance = targetUser.balance;
+    const newBalance = setBalance ? amount : previousBalance + amount;
+    const addedAmount = setBalance ? Math.max(0, newBalance - previousBalance) : amount;
     const ref = generateRefNo('ROY-CRD');
     const chosenDesc = customNote || 'IMPS Inward Remittance - Direct Bank Settlement';
 
-    const updatedUsers = users.map((u) => (u.id === userId ? { ...u, balance: newBalance } : u));
+    // Optimistically update local users state
+    const updatedUsers = users.map((u) => (u.id === targetUser.id ? { ...u, balance: newBalance } : u));
     setUsers(updatedUsers);
 
     const newTxn: Transaction = {
       id: `txn-${Date.now()}`,
-      userId,
+      userId: targetUser.id,
       type: 'credit',
-      amount,
+      amount: addedAmount > 0 ? addedAmount : amount,
       description: `${chosenDesc} - Ref #${ref}`,
       refNo: ref,
       date: new Date().toISOString(),
@@ -626,24 +666,41 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const newNotif: SMSNotification = {
       id: `sms-${Date.now()}`,
-      userId,
+      userId: targetUser.id,
       phone: targetUser.phone,
       title: 'A/C Credited Alert',
-      message: `Dear Customer, your A/C linked to +91 ${targetUser.phone} has been credited with ₹${amount.toLocaleString('en-IN')} on ${new Date().toLocaleDateString('en-GB')}. Available Balance: ₹${newBalance.toLocaleString('en-IN')}. Ref: ROY-RTGS-${ref}`,
+      message: `Dear Customer, your A/C linked to +91 ${targetUser.phone} has been credited with ₹${(addedAmount > 0 ? addedAmount : amount).toLocaleString('en-IN')} on ${new Date().toLocaleDateString('en-GB')}. Available Balance: ₹${newBalance.toLocaleString('en-IN')}. Ref: ROY-RTGS-${ref}`,
       timestamp: new Date().toISOString(),
       read: false,
-      amount,
+      amount: addedAmount > 0 ? addedAmount : amount,
       type: 'credit',
     };
     setSmsNotifications((prev) => [newNotif, ...prev]);
 
-    if (currentUser?.id === userId) {
+    if (
+      currentUser?.id === targetUser.id ||
+      currentUser?.email.toLowerCase() === targetUser.email.toLowerCase()
+    ) {
       setCurrentUser({ ...targetUser, balance: newBalance });
       playCreditChime();
+      setActiveSMSPopup(newNotif);
     }
 
-    // Call server
-    apiAdminAddFunds(userId, amount, customNote);
+    // Call server to persist and return authoritative state
+    try {
+      const res = await apiAdminAddFunds(targetUser.id, amount, customNote, setBalance);
+      if (res && res.success && res.user) {
+        setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? res.user! : u)));
+        if (
+          currentUser?.id === targetUser.id ||
+          currentUser?.email.toLowerCase() === targetUser.email.toLowerCase()
+        ) {
+          setCurrentUser(res.user);
+        }
+      }
+    } catch (err) {
+      console.warn('apiAdminAddFunds error:', err);
+    }
   };
 
   // Admin: Toggle user status
@@ -662,7 +719,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (current) setCurrentUser(current);
     }
 
-    // Call server
     apiAdminToggleStatus(userId);
   };
 
@@ -717,11 +773,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       )
     );
 
-    // Call server
     apiAdminProcessWithdrawal(withdrawalId, status, remarks);
   };
 
-  // Admin: Create new user (instantly synchronized to server DB for all devices)
+  // Admin: Create new user
   const adminCreateUser = (userData: Partial<User>) => {
     const newUser: User = {
       id: userData.id || `usr-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
@@ -742,8 +797,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     setUsers((prev) => [newUser, ...prev]);
-
-    // Send to central server
     apiAdminCreateUser(newUser);
   };
 
@@ -759,7 +812,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsAdminMode(false);
     }
 
-    // Call server
     apiAdminDeleteUser(userId);
   };
 
@@ -778,8 +830,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
 
     setSmsNotifications((prev) => [...newNotifs, ...prev]);
-
-    // Call server
     apiAdminBroadcastAlert(title, message, targetUserId);
   };
 
@@ -800,6 +850,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         smsNotifications,
         isAdminMode,
         setIsAdminMode,
+        activeSMSPopup,
+        dismissSMSPopup,
+        refreshData,
         login,
         register,
         updateBankDetails,
